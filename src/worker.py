@@ -6,51 +6,29 @@ from abc import ABC, abstractmethod
 from queue import Queue
 from typing import Any, Callable
 
-# logging.basicConfig(filename='pipeline.debug.log', encoding='utf-8', level=logging.DEBUG)
+from common import Worker, PipelineCallable, PipelineStop
+
+logging.basicConfig(filename='pipeline.debug.log', encoding='utf-8', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-class PipelineStop:
-    pass
-
-
-class Worker(ABC):
-
-    def __init__(self, function: Callable, input_queue: Queue, output_queue: Queue , valid_inputs: list = None, *args, **kwargs):
-        self._input_q = input_queue
-        self._output_q = output_queue
-        self._function = function
-        self.valid_inputs = None if not valid_inputs or len(valid_inputs) < 1 else valid_inputs
-            
-
-    @abstractmethod
-    def _exec(self, *args, **kwargds):
-        raise NotImplementedError
-
-    def _check_valid_inputs(self, input: Any):
-        if not input:
-            time.sleep(0.1)
-            return False
-
-        if not self.valid_inputs:
-            return True
-
-        for v in self.valid_inputs:
-            if isinstance(input, v):
-                return True
-
-        return False
-
-    def run(self):
-        self._exec()
-
-
 class DefaultPipelineWorker(Worker):
+    """
+    Standard worker which reads data from an input queue, calls a function, and puts the output of that function into 
+    an output queue. If the input is a list, each element of the list will be passed to the function sequentially. If the
+    function output is a list, each element of the list will be pushed into the output queue sequentially.
 
+    Args:
+     function: PipelineFunction which takes as input a single variable `input` and produces an output. Use `functools.partial` 
+               when creating a PipelineFunction to include other parameters or pass a dictionary as input.
+     input_queue: Queue to use for generating input. Default Pipeline implementation uses a `multiprocessing.Queue`
+     output_queue: Queue to use for pushing output. Default Pipeline implementation uses a `multiprocessing.Queue`
+    """
     def __init__(self, function: Callable, input_queue: Queue, output_queue: Queue, *args, **kwargs):
-        super().__init__(function, input_queue, output_queue, *args, **kwargs)
-        
+        super().__init__(function, input_queue, output_queue, *args, **kwargs) 
+
     def _get_input(self):
+
         if self._input_q.empty():
             return None
 
@@ -63,14 +41,15 @@ class DefaultPipelineWorker(Worker):
         return _input
 
     def _process_input(self, input):
-        
         if isinstance(input, list):
             for i in input:
-                o = self._function(i)
+                o = _wrap(self._function, i)
+                logger.debug(f"{self._function.name} inserting {o} into output queue")
                 self._output_q.put(o)
             
         else:
-            o = self._function(input)
+            o = _wrap(self._function, input)
+            logger.debug(f"{self._function.name} inserting {o} into output queue")
             if isinstance(o, list):
                 for _o in o:
                     self._output_q.put(_o)
@@ -88,4 +67,37 @@ class DefaultPipelineWorker(Worker):
             self._process_input(input)
         self._output_q.put(PipelineStop())
 
-        
+
+def _wrap(function: Callable, input: Any):    
+    # Case: Input is not a dictionary
+    if not isinstance(input, dict):
+        logger.debug("Not a dictionary.")
+        _output = function(input)
+        if not function.output_variable:    
+            return _output
+        return {function.output_variable: _output}
+
+    # Input is a dictionary. 
+    # Case: No input variable specified.
+    if not function.input_variable:
+        logger.debug(f"No input variable specifed. Passing {input}")
+        _output = function(input)
+        if not function.output_variable:    
+            return _output
+        return {function.output_variable: _output}
+
+    # Case: Input variable is specified.
+    _input =  input.get(function.input_variable, None)
+    logger.debug(f"Got {_input} from input dictionary.")
+    print(f"{_input=}")
+    if  _input is None:
+        logger.warn(f"Variable {function.input_variable} not present in input. Passing the input instead. {input}")
+        _output =  function(input)
+    else:
+        _output =  function(_input)
+    print(f"{_output=}")
+    if function.output_variable is None:    
+        return _output
+    input.update({function.output_variable: _output})
+
+    return input
