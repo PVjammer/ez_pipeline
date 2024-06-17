@@ -6,8 +6,8 @@ from abc import ABC, abstractmethod
 # from queue import Queue
 from typing import Any, Callable
 
-from common import PipelineCallable, PipelineStop, Worker
-from worker import DefaultPipelineWorker
+from .common import PipelineCallable, PipelineStop, Worker
+from .worker import DefaultPipelineWorker
 
 """
 # TODO 

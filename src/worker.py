@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from queue import Queue
 from typing import Any, Callable
 
-from common import Worker, PipelineCallable, PipelineStop
+from .common import Worker, PipelineCallable, PipelineStop
 
 logging.basicConfig(filename='pipeline.debug.log', encoding='utf-8', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
