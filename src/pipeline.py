@@ -80,7 +80,7 @@ class Pipeline(PipelineCallable):
     def _insert_input(self, input: Any):
         for i in input:
             self._queues[0].put(i)
-            print(f"Inserting {i} into queue {self._queues[0]}")
+            logger.info(f"Inserting {i} into queue {self._queues[0]}")
         self._queues[0].put(PipelineStop())
 
     def _run(self, input: Any):
@@ -92,12 +92,10 @@ class Pipeline(PipelineCallable):
             p = mp.Process(target=w.run)
             p.start()
             processes.append(p)
-        # p = mp.Process(target=self._insert_input, args=(input))
-        self._insert_input(input)
-        # print(self._queues[0].get())
-        # raise
-        # p.start()
-        # processes.append(p)
+        p = mp.Process(target=self._insert_input, args=(input,))
+        
+        p.start()
+        processes.append(p)
 
         # Run as blocking process until output queue is empty
         output_list = []
@@ -155,9 +153,9 @@ def div_3(x):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(filename='pipeline.debug.log', encoding='utf-8', level=logging.DEBUG)
+    # logging.basicConfig(filename='pipeline.debug.log', encoding='utf-8', level=logging.DEBUG)
     pipeline: Pipeline = PipelineFunction(add_two, name="add_two") | PipelineFunction(double, name="double") | PipelineFunction(div_3, name="div3")
-    input_list = range(10000)
+    input_list = range(100000)
     # output = pipeline._exec(input_list)
     output = pipeline._run(input_list)
     print(output)

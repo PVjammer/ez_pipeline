@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 # logging.basicConfig(filename='pipeline.debug.log', encoding='utf-8', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+
 
 class PipelineStop:
     pass
