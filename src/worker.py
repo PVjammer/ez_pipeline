@@ -6,6 +6,9 @@ from abc import ABC, abstractmethod
 from queue import Queue
 from typing import Any, Callable
 
+# logging.basicConfig(filename='pipeline.debug.log', encoding='utf-8', level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 class PipelineStop:
     pass
@@ -47,19 +50,17 @@ class DefaultPipelineWorker(Worker):
     def __init__(self, function: Callable, input_queue: Queue, output_queue: Queue, *args, **kwargs):
         super().__init__(function, input_queue, output_queue, *args, **kwargs)
         
-
     def _get_input(self):
         if self._input_q.empty():
-            print(f"{self._function.name}: Queue Empty {self._input_q}")
             return None
 
         _input = self._input_q.get()
-        print(f"{self._function.name} got input {_input}")
+        logger.info(f"{self._function.name} got input {_input}")
 
         if not self._check_valid_inputs(_input):
             return None
 
-        return input
+        return _input
 
     def _process_input(self, input):
         
@@ -76,20 +77,14 @@ class DefaultPipelineWorker(Worker):
             else:
                 self._output_q.put(o)
 
-
-    def _exec(self):
-        
+    def _exec(self):     
         while True:
             input = self._get_input()
-            
-
             if isinstance(input, PipelineStop):
-                print("Got PIPELINESTOP")
                 break
             if not input:
                 time.sleep(0.1)
                 continue
-            print(f"{self._function.name} got input {input}")
             self._process_input(input)
         self._output_q.put(PipelineStop())
 

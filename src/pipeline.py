@@ -3,7 +3,7 @@ import multiprocessing as mp
 import time
 
 from abc import ABC, abstractmethod
-from queue import Queue
+# from queue import Queue
 from typing import Any, Callable
 
 from worker import PipelineStop, Worker, DefaultPipelineWorker
@@ -30,7 +30,7 @@ class PipelineCallable(ABC):
 class PipelineFunction(PipelineCallable):
 
     def __init__(self, f: Callable, name: str = None, valid_inputs: list = None) -> None:
-        self._input_q = Queue()
+        # self._input_q = Queue()
         self._func = f
         self._name = name
         self.valid_inputs = valid_inputs
@@ -103,19 +103,16 @@ class Pipeline(PipelineCallable):
         output_list = []
         while True:
             if self._queues[-1].empty():
-                print("Queue Empty")
                 time.sleep(0.5)
                 continue
 
             _output = self._queues[-1].get()
             if isinstance(_output, PipelineStop):
                 logger.info("Pipeline finished")
-                print(f"Pipeline finished")
                 for p in processes:
                     p.terminate()
                 break
             if not _output:
-                print("No output")
                 time.sleep(0.1)
                 continue
             output_list.append(_output)
@@ -158,6 +155,7 @@ def div_3(x):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(filename='pipeline.debug.log', encoding='utf-8', level=logging.DEBUG)
     pipeline: Pipeline = PipelineFunction(add_two, name="add_two") | PipelineFunction(double, name="double") | PipelineFunction(div_3, name="div3")
     input_list = range(10000)
     # output = pipeline._exec(input_list)
