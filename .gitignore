@@ -1,4 +1,4 @@
 */**/*.log
 */**/*.json
-# */**/__pycache__
+*/**/__pycache__
 */**/volumes
