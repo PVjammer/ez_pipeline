@@ -1,3 +1,4 @@
+import concurrent.futures
 import logging
 import time
 import multiprocessing as mp
@@ -24,8 +25,8 @@ class DefaultPipelineWorker(Worker):
      input_queue: Queue to use for generating input. Default Pipeline implementation uses a `multiprocessing.Queue`
      output_queue: Queue to use for pushing output. Default Pipeline implementation uses a `multiprocessing.Queue`
     """
-    def __init__(self, function: Callable, input_queue: Queue, output_queue: Queue, *args, **kwargs):
-        super().__init__(function, input_queue, output_queue, *args, **kwargs) 
+    def __init__(self, function: Callable, input_queue: Queue, output_queue: Queue, num_workers: int = 1, *args, **kwargs):
+        super().__init__(function, input_queue, output_queue,  num_workers=num_workers, *args, **kwargs) 
 
     def _get_input(self):
 
@@ -56,16 +57,34 @@ class DefaultPipelineWorker(Worker):
             else:
                 self._output_q.put(o)
 
-    def _exec(self):     
+    def _exec(self, thread_number=0):     
         while True:
             input = self._get_input()
+            logging.info(f"{self._function.name}:thread-{thread_number} got input {input}")
             if isinstance(input, PipelineStop):
+                logging.info(f"{self._function.name}:thread-{thread_number} stopping")
+                self._input_q.put(PipelineStop())
                 break
             if not input:
                 time.sleep(0.1)
                 continue
             self._process_input(input)
+        
+
+    def _exec_single_threaded(self):
+        self._exec()
+        logger.warn(f"{self._function.name} finished work and is inserting pipelineStop")
         self._output_q.put(PipelineStop())
+
+
+    def _exec_threaded(self):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self._num_workers) as executor:
+            for i in range(self._num_workers):
+                executor.submit(self._exec, i)
+        self._output_q.put(PipelineStop()) 
+                
+
+# def pipeline_worker(function: Callable, input_queue: Queue, output_queue: Queue, *args, **kwargs):
 
 
 def _wrap(function: Callable, input: Any):    
@@ -89,15 +108,16 @@ def _wrap(function: Callable, input: Any):
     # Case: Input variable is specified.
     _input =  input.get(function.input_variable, None)
     logger.debug(f"Got {_input} from input dictionary.")
-    print(f"{_input=}")
+    
     if  _input is None:
         logger.warn(f"Variable {function.input_variable} not present in input. Passing the input instead. {input}")
         _output =  function(input)
     else:
         _output =  function(_input)
-    print(f"{_output=}")
+    
     if function.output_variable is None:    
         return _output
     input.update({function.output_variable: _output})
 
     return input
+

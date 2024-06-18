@@ -1,3 +1,4 @@
+import concurrent.futures
 import logging
 import multiprocessing as mp
 import time
@@ -11,7 +12,7 @@ from .worker import DefaultPipelineWorker
 
 """
 # TODO 
- - Incorporate workers in separate threads for continuous processing
+ - Store function neighbor names
  - Incorporate batch processing
  - Settle on a data structure for input?
 """
@@ -27,17 +28,21 @@ class PipelineFunction(PipelineCallable):
                  f: Callable, 
                  name: str = None, 
                  valid_inputs: list = None, 
-                 input_variable = None,
-                 output_variable = None,) -> None:
+                 input_variable: str = None,
+                 output_variable: str = None,
+                 num_workers: int = 1) -> None:
         
         self._func = f
         self._name = name
         self.valid_inputs = valid_inputs
         self.input_variable = input_variable
         self.output_variable = output_variable
+        self._num_workers = num_workers
 
     @property
     def name(self):
+        if not self._name:
+            return str(self)
         return self._name
 
     def _exec(self, input: Any):
@@ -48,6 +53,40 @@ class PipelineFunction(PipelineCallable):
     
     def __ror__(self, f: Any):
         return Pipeline(*pipeify(f), self)
+
+
+# class MultiThreadedPipelineFunction(PipelineCallable):
+
+#     def __init__(self, 
+#                  f: Callable, 
+#                  name: str = None, 
+#                  valid_inputs: list = None, 
+#                  input_variable: str = None,
+#                  output_variable: str = None,
+#                  num_workers: int = 5) -> None:
+        
+#         self._func = f
+#         self._name = name
+#         self.valid_inputs = valid_inputs
+#         self.input_variable = input_variable
+#         self.output_variable = output_variable
+
+#     @property
+#     def name(self):
+#         if not self._name:
+#             return str(self)
+#         return self._name
+
+#     def _exec(self, input: Any):
+
+#         return self._func(input)
+
+#     def __or__(self, f: Any):
+#         return Pipeline(self, *pipeify(f))
+    
+#     def __ror__(self, f: Any):
+#         return Pipeline(*pipeify(f), self)
+
 
 
 class Pipeline(PipelineCallable):
@@ -75,13 +114,18 @@ class Pipeline(PipelineCallable):
                 input_queue=self._queues[-1],
                 output_queue=output_queue,
                 valid_inputs= self._functions[i].valid_inputs,
+                num_workers= self._functions[i]._num_workers,
             ))
             self._queues.append(output_queue)
 
     def _insert_input(self, input: Any):
-        for i in input:
-            self._queues[0].put(i)
-            logger.info(f"Inserting {i} into queue {self._queues[0]}")
+        if not isinstance(input, list):
+            self._queues[0].put(input)
+        else:
+            for i in input:
+                self._queues[0].put(i)
+                logger.info(f"Inserting {i} into queue {self._queues[0]}")
+        logger.info(f"Inserting pipelineStop into queue {self._queues[0]}")
         self._queues[0].put(PipelineStop())
 
     def _run(self, input: Any):
@@ -142,39 +186,3 @@ def pipeify(f: Any) -> list[PipelineFunction]:
 
 def flatten(pipeline: Pipeline):
     return pipeline.get_functions()
-
-def add_two(input):
-    if isinstance(input, dict):
-        x = input["num"]
-    else:
-        x = input
-    return  x + 2
-
-def double(input):
-    if isinstance(input, dict):
-        x = input["num"]
-    else:
-        x = input
-    return  x*2
-
-def div_3(input):
-    if isinstance(input, dict):
-        x = input["num"]
-    else:
-        x = input
-    return round(x/3.0, 2)
-
-
-if __name__ == "__main__":
-    # logging.basicConfig(filename='pipeline.debug.log', encoding='utf-8', level=logging.DEBUG)
-   
-    pipeline: Pipeline = (
-          PipelineFunction(add_two, name="add_two", input_variable="var", output_variable="out")
-        | PipelineFunction(double, name="double", input_variable="out", output_variable="res") 
-        | PipelineFunction(div_3, name="div3", input_variable="res", output_variable = "final_result")
-    )
-    
-    input_list = [{"var": i} for i in range(10)]
-    # output = pipeline._exec(input_list)
-    output = pipeline._run(input_list)
-    print(output)

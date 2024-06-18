@@ -20,15 +20,24 @@ class PipelineCallable(ABC):
 
 class Worker(ABC):
     """"""
-    def __init__(self, function: Callable, input_queue: Queue, output_queue: Queue , valid_inputs: list = None, *args, **kwargs):
+    def __init__(self, function: Callable, input_queue: Queue, output_queue: Queue , valid_inputs: list = None, num_workers: int = 1, *args, **kwargs):
         self._input_q = input_queue
         self._output_q = output_queue
         self._function = function
+        self._num_workers = num_workers
+        print(f"{self.__dict__ =}")
         self.valid_inputs = None if not valid_inputs or len(valid_inputs) < 1 else valid_inputs
             
 
     @abstractmethod
     def _exec(self, *args, **kwargds):
+        raise NotImplementedError
+    
+    def _exec_single_threaded(self):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def _exec_threaded(self):
         raise NotImplementedError
 
     def _check_valid_inputs(self, input: Any):
@@ -46,4 +55,8 @@ class Worker(ABC):
         return False
 
     def run(self):
-        self._exec()
+        if self._num_workers > 1:
+            self._exec_threaded()
+        else:
+            self._exec_single_threaded()
+    
